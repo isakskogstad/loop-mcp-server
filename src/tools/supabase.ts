@@ -88,18 +88,18 @@ export function registerTools(server: McpServer): void {
         let q = sb
           .from("Nyhetskort")
           .select(
-            "id, headline, orgNumber, companyName, date, category, type, summary, url"
+            "id, headline, org_number, company_name, event_date, event_type, notice_text, source_url"
           );
 
         if (params.query) q = q.ilike("headline", `%${params.query}%`);
-        if (params.org_number) q = q.eq("orgNumber", params.org_number);
-        if (params.category) q = q.eq("category", params.category);
-        if (params.type) q = q.eq("type", params.type);
-        if (params.from_date) q = q.gte("date", params.from_date);
-        if (params.to_date) q = q.lte("date", params.to_date);
+        if (params.org_number) q = q.eq("org_number", params.org_number);
+        if (params.category) q = q.eq("event_type", params.category);
+        if (params.type) q = q.eq("event_type", params.type);
+        if (params.from_date) q = q.gte("event_date", params.from_date);
+        if (params.to_date) q = q.lte("event_date", params.to_date);
 
         const { data, error } = await q
-          .order("date", { ascending: false })
+          .order("event_date", { ascending: false })
           .limit(params.limit);
 
         if (error) return fail(error.message);
@@ -148,7 +148,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "List recent news",
       description:
-        "Fetch the latest news cards, optionally filtered by category or type.",
+        "Fetch the latest news cards, optionally filtered by event_type.",
       inputSchema: {
         limit: z
           .number()
@@ -157,8 +157,12 @@ export function registerTools(server: McpServer): void {
           .max(50)
           .default(20)
           .describe("Max results to return (default 20, max 50)"),
-        category: z.string().optional().describe("News category to filter by"),
-        type: z.string().optional().describe("News type to filter by"),
+        event_type: z
+          .string()
+          .optional()
+          .describe(
+            "Event type to filter by (e.g. protokoll, kungorelse, arsredovisning)"
+          ),
       },
       annotations: READONLY_ANNOTATIONS,
     },
@@ -168,14 +172,13 @@ export function registerTools(server: McpServer): void {
         let q = sb
           .from("Nyhetskort")
           .select(
-            "id, headline, orgNumber, companyName, date, category, type, summary, url"
+            "id, headline, org_number, company_name, event_date, event_type, notice_text, source_url"
           );
 
-        if (params.category) q = q.eq("category", params.category);
-        if (params.type) q = q.eq("type", params.type);
+        if (params.event_type) q = q.eq("event_type", params.event_type);
 
         const { data, error } = await q
-          .order("date", { ascending: false })
+          .order("event_date", { ascending: false })
           .limit(params.limit);
 
         if (error) return fail(error.message);
@@ -213,10 +216,10 @@ export function registerTools(server: McpServer): void {
           sb
             .from("Nyhetskort")
             .select(
-              "id, headline, orgNumber, companyName, date, category, type, summary, url"
+              "id, headline, org_number, company_name, event_date, event_type, notice_text, source_url"
             )
-            .eq("orgNumber", params.org_number)
-            .order("date", { ascending: false })
+            .eq("org_number", params.org_number)
+            .order("event_date", { ascending: false })
             .limit(10),
         ]);
 
@@ -299,10 +302,10 @@ export function registerTools(server: McpServer): void {
         const { data, error } = await sb
           .from("CompanyFinancials")
           .select(
-            "orgNumber, year, summa_rorelseintakter, resultat_efter_finansiella_poster, summa_eget_kapital, summa_tillgangar, summa_skulder, antal_anstallda, soliditet, kassalikviditet"
+            "orgNumber, fiscalYear, nettoomsattning, rorelseresultat, resultat_efter_finansiella, arets_resultat, summa_tillgangar, anlaggningstillgangar, personalkostnader"
           )
           .eq("orgNumber", params.org_number)
-          .order("year", { ascending: false })
+          .order("fiscalYear", { ascending: false })
           .limit(5);
 
         if (error) return fail(error.message);
@@ -378,12 +381,12 @@ export function registerTools(server: McpServer): void {
         let q = sb
           .from("Nyhetskort")
           .select("*")
-          .eq("orgNumber", params.org_number);
+          .eq("org_number", params.org_number);
 
-        if (params.from_date) q = q.gte("date", params.from_date);
+        if (params.from_date) q = q.gte("event_date", params.from_date);
 
         const { data, error } = await q
-          .order("date", { ascending: false })
+          .order("event_date", { ascending: false })
           .limit(params.limit);
 
         if (error) return fail(error.message);
@@ -429,16 +432,16 @@ export function registerTools(server: McpServer): void {
         let q = sb
           .from("ProtocolAnalysis")
           .select(
-            "id, orgNumber, companyName, protocolType, summary, date, decisions"
+            "id, org_number, company_name, protocol_type, protocol_date, extracted_data, news_content"
           );
 
-        if (params.query) q = q.ilike("summary", `%${params.query}%`);
-        if (params.org_number) q = q.eq("orgNumber", params.org_number);
+        if (params.query) q = q.ilike("news_content", `%${params.query}%`);
+        if (params.org_number) q = q.eq("org_number", params.org_number);
         if (params.protocol_type)
-          q = q.eq("protocolType", params.protocol_type);
+          q = q.eq("protocol_type", params.protocol_type);
 
         const { data, error } = await q
-          .order("date", { ascending: false })
+          .order("protocol_date", { ascending: false })
           .limit(params.limit);
 
         if (error) return fail(error.message);
@@ -488,16 +491,16 @@ export function registerTools(server: McpServer): void {
         let q = sb
           .from("Kungorelser")
           .select(
-            "id, rubrik, org_number, foretagsnamn, typ, datum, lan, amnesomrade"
+            "id, kungorelse_id, org_number, company_name, amnesomrade, typ, underrubrik, publicerad, lan, ort"
           );
 
-        if (params.query) q = q.ilike("rubrik", `%${params.query}%`);
+        if (params.query) q = q.ilike("underrubrik", `%${params.query}%`);
         if (params.org_number) q = q.eq("org_number", params.org_number);
         if (params.type) q = q.eq("typ", params.type);
-        if (params.from_date) q = q.gte("datum", params.from_date);
+        if (params.from_date) q = q.gte("publicerad", params.from_date);
 
         const { data, error } = await q
-          .order("datum", { ascending: false })
+          .order("publicerad", { ascending: false })
           .limit(params.limit);
 
         if (error) return fail(error.message);

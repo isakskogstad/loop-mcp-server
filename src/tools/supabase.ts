@@ -242,14 +242,9 @@ export function registerTools(server: McpServer): void {
     "loop_search_companies",
     {
       title: "Search companies",
-      description:
-        "Search the CompanyDirectory by name, optionally filtered by impact niche.",
+      description: "Search the CompanyDirectory by company name.",
       inputSchema: {
         query: z.string().describe("Company name search query"),
-        impact_niche: z
-          .string()
-          .optional()
-          .describe("Impact niche tag to filter by"),
         limit: z
           .number()
           .int()
@@ -263,14 +258,12 @@ export function registerTools(server: McpServer): void {
     async (params) => {
       try {
         const sb = getClient();
-        let q = sb
+        const q = sb
           .from("CompanyDirectory")
-          .select("orgNumber, name, impactNiches, bolesformDesc, kommun")
+          .select(
+            "orgNumber, name, companyForm, municipality, sniDescription, city, status"
+          )
           .ilike("name", `%${params.query}%`);
-
-        if (params.impact_niche) {
-          q = q.contains("impactNiches", [params.impact_niche]);
-        }
 
         const { data, error } = await q.limit(params.limit);
 

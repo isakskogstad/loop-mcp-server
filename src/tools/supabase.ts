@@ -507,4 +507,220 @@ export function registerTools(server: McpServer): void {
       }
     }
   );
+
+  // -----------------------------------------------------------------------
+  // 11. loop_query_table
+  // -----------------------------------------------------------------------
+  server.registerTool(
+    "loop_query_table",
+    {
+      title: "Query any table",
+      description:
+        "Flexible read-only query against any Supabase table. Supports column selection, filtering with various operators, ordering, and pagination. Use loop_list_tables first to discover available tables and their columns.",
+      inputSchema: {
+        table: z.string().describe("Table name to query"),
+        select: z
+          .string()
+          .default("*")
+          .describe("Columns to select (PostgREST syntax, default '*')"),
+        filters: z
+          .array(
+            z.object({
+              column: z.string().describe("Column name"),
+              operator: z
+                .enum([
+                  "eq",
+                  "neq",
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte",
+                  "like",
+                  "ilike",
+                  "is",
+                  "in",
+                  "contains",
+                  "containedBy",
+                  "overlaps",
+                ])
+                .describe("Filter operator"),
+              value: z
+                .union([
+                  z.string(),
+                  z.number(),
+                  z.boolean(),
+                  z.null(),
+                  z.array(z.unknown()),
+                ])
+                .describe(
+                  "Value to compare against. Use array for 'in', 'contains', 'containedBy', 'overlaps'. Use null with 'is'."
+                ),
+            })
+          )
+          .optional()
+          .describe("Array of filter conditions"),
+        order_by: z.string().optional().describe("Column to order by"),
+        ascending: z
+          .boolean()
+          .default(false)
+          .describe("Sort ascending (default false = descending)"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .default(20)
+          .describe("Max rows to return (default 20, max 200)"),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .default(0)
+          .describe("Number of rows to skip (for pagination, default 0)"),
+      },
+      annotations: READONLY_ANNOTATIONS,
+    },
+    async (params) => {
+      try {
+        const sb = getClient();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q: any = sb
+          .from(params.table)
+          .select(params.select, { count: "exact" });
+
+        // Apply filters
+        if (params.filters) {
+          for (const f of params.filters) {
+            switch (f.operator) {
+              case "eq":
+                q = q.eq(f.column, f.value);
+                break;
+              case "neq":
+                q = q.neq(f.column, f.value);
+                break;
+              case "gt":
+                q = q.gt(f.column, f.value);
+                break;
+              case "gte":
+                q = q.gte(f.column, f.value);
+                break;
+              case "lt":
+                q = q.lt(f.column, f.value);
+                break;
+              case "lte":
+                q = q.lte(f.column, f.value);
+                break;
+              case "like":
+                q = q.like(f.column, f.value as string);
+                break;
+              case "ilike":
+                q = q.ilike(f.column, f.value as string);
+                break;
+              case "is":
+                q = q.is(f.column, f.value);
+                break;
+              case "in":
+                q = q.in(f.column, f.value as unknown[]);
+                break;
+              case "contains":
+                q = q.contains(f.column, f.value);
+                break;
+              case "containedBy":
+                q = q.containedBy(f.column, f.value);
+                break;
+              case "overlaps":
+                q = q.overlaps(f.column, f.value);
+                break;
+            }
+          }
+        }
+
+        // Ordering
+        if (params.order_by) {
+          q = q.order(params.order_by, { ascending: params.ascending });
+        }
+
+        // Pagination
+        q = q.range(params.offset, params.offset + params.limit - 1);
+
+        const { data, error, count } = await q;
+
+        if (error) return fail(error.message);
+        return ok({
+          total_count: count,
+          rows_returned: data?.length ?? 0,
+          data,
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+
+  // -----------------------------------------------------------------------
+  // 12. loop_list_tables
+  // -----------------------------------------------------------------------
+  server.registerTool(
+    "loop_list_tables",
+    {
+      title: "List database tables",
+      description:
+        "List all available tables in the Supabase database with their column names. Useful for discovering what data is available before using loop_query_table.",
+      inputSchema: {},
+      annotations: READONLY_ANNOTATIONS,
+    },
+    async () => {
+      try {
+        const supabaseUrl = process.env.SUPABASE_URL!;
+        const serviceKey = process.env.SUPABASE_SERVICE_KEY!;
+
+        const res = await fetch(`${supabaseUrl}/rest/v1/`, {
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+          },
+        });
+
+        if (!res.ok) {
+          return fail(`PostgREST returned ${res.status}: ${await res.text()}`);
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const openapi = (await res.json()) as any;
+        const paths = openapi.paths ?? {};
+        const definitions = openapi.definitions ?? {};
+
+        const tables: Array<{
+          name: string;
+          description: string | null;
+          columns: string[];
+        }> = [];
+
+        for (const [path, methods] of Object.entries(paths)) {
+          const tableName = path.replace(/^\//, "");
+          if (!tableName || tableName.startsWith("rpc/")) continue;
+
+          const desc =
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (methods as any)?.get?.description ??
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (methods as any)?.post?.description ??
+            null;
+
+          // Extract columns from definitions
+          const def = definitions[tableName];
+          const columns = def?.properties ? Object.keys(def.properties) : [];
+
+          tables.push({ name: tableName, description: desc, columns });
+        }
+
+        // Sort alphabetically
+        tables.sort((a, b) => a.name.localeCompare(b.name));
+
+        return ok({ total_tables: tables.length, tables });
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
 }

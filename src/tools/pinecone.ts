@@ -1,7 +1,85 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+// Cached index host so we only resolve once per process
+let cachedIndexHost: string | null = null;
+
+interface PineconeIndex {
+  name: string;
+  host: string;
+  metric?: string;
+  dimension?: number;
+  status?: { ready: boolean; state: string };
+}
+
+interface PineconeListIndexesResponse {
+  indexes?: PineconeIndex[];
+}
+
+/**
+ * List all Pinecone indexes using the control plane API.
+ */
+async function listPineconeIndexes(apiKey: string): Promise<PineconeIndex[]> {
+  const response = await fetch("https://api.pinecone.io/indexes", {
+    method: "GET",
+    headers: {
+      "Api-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Pinecone List Indexes API error (${response.status}): ${errorText}`
+    );
+  }
+
+  const data = (await response.json()) as PineconeListIndexesResponse;
+  return data.indexes ?? [];
+}
+
+/**
+ * Resolve the Pinecone index host, with caching.
+ *
+ * Priority:
+ * 1. PINECONE_INDEX_HOST env var (used directly)
+ * 2. PINECONE_INDEX_NAME env var (look up host via List Indexes API)
+ * 3. Default names: "impactloop-articles", "impactloop"
+ */
+async function resolveIndexHost(apiKey: string): Promise<string | null> {
+  if (cachedIndexHost) return cachedIndexHost;
+
+  // 1. Explicit host
+  const explicitHost = process.env.PINECONE_INDEX_HOST;
+  if (explicitHost) {
+    cachedIndexHost = explicitHost;
+    return cachedIndexHost;
+  }
+
+  // 2. Resolve by name
+  const indexes = await listPineconeIndexes(apiKey);
+
+  const targetName = process.env.PINECONE_INDEX_NAME;
+  const namesToTry = targetName
+    ? [targetName]
+    : ["impactloop-articles", "impactloop"];
+
+  for (const name of namesToTry) {
+    const found = indexes.find(
+      (idx) => idx.name.toLowerCase() === name.toLowerCase()
+    );
+    if (found) {
+      cachedIndexHost = found.host;
+      return cachedIndexHost;
+    }
+  }
+
+  return null;
+}
+
 export function registerPineconeTools(server: McpServer): void {
+  // --- Tool 1: Semantic search ---
   server.registerTool(
     "loop_semantic_search",
     {
@@ -38,14 +116,13 @@ export function registerPineconeTools(server: McpServer): void {
       }
 
       try {
-        // Use Pinecone inference search REST API for integrated indexes
-        const indexHost = process.env.PINECONE_INDEX_HOST;
+        const indexHost = await resolveIndexHost(apiKey);
         if (!indexHost) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: "Pinecone index host is not configured. Set the PINECONE_INDEX_HOST environment variable (e.g. 'my-index-abc123.svc.pinecone.io').",
+                text: "Could not resolve Pinecone index host. Set PINECONE_INDEX_HOST or PINECONE_INDEX_NAME, or ensure an index named 'impactloop-articles' or 'impactloop' exists.",
               },
             ],
           };
@@ -108,6 +185,77 @@ export function registerPineconeTools(server: McpServer): void {
             {
               type: "text" as const,
               text: `Pinecone search failed: ${message}`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  // --- Tool 2: List Pinecone indexes ---
+  server.registerTool(
+    "loop_list_pinecone_indexes",
+    {
+      title: "List Pinecone indexes",
+      description:
+        "Lists all available Pinecone indexes with their names and hosts. Useful for debugging configuration.",
+      inputSchema: {},
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+    },
+    async () => {
+      const apiKey = process.env.PINECONE_API_KEY;
+      if (!apiKey) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Pinecone is not configured. Set the PINECONE_API_KEY environment variable.",
+            },
+          ],
+        };
+      }
+
+      try {
+        const indexes = await listPineconeIndexes(apiKey);
+
+        if (indexes.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "No Pinecone indexes found for this API key.",
+              },
+            ],
+          };
+        }
+
+        const summary = indexes.map((idx) => ({
+          name: idx.name,
+          host: idx.host,
+          metric: idx.metric,
+          dimension: idx.dimension,
+          status: idx.status,
+        }));
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(summary, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Failed to list Pinecone indexes: ${message}`,
             },
           ],
         };

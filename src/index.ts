@@ -70,8 +70,23 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok" });
 });
 
+// CORS headers for MCP endpoint
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, MCP-Session-Id, MCP-Protocol-Version",
+};
+
+// OPTIONS preflight
+app.options("/mcp", (_req: Request, res: Response) => {
+  res.set(CORS_HEADERS).status(204).end();
+});
+
 // MCP endpoint — stateless, one transport per request
 app.post("/mcp", authMiddleware, async (req: Request, res: Response) => {
+  res.set(CORS_HEADERS);
+
   const server = createServer();
 
   const transport = new StreamableHTTPServerTransport({
@@ -85,16 +100,20 @@ app.post("/mcp", authMiddleware, async (req: Request, res: Response) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-// SSE not supported
+// SSE not supported — return 405 with Allow header
 app.get("/mcp", (_req: Request, res: Response) => {
   res
+    .set({ ...CORS_HEADERS, Allow: "POST" })
     .status(405)
     .json({ error: "SSE transport is not supported. Use POST /mcp." });
 });
 
-// Sessions not supported
+// Sessions not supported — return 405 with Allow header
 app.delete("/mcp", (_req: Request, res: Response) => {
-  res.status(405).json({ error: "Session deletion is not supported." });
+  res
+    .set({ ...CORS_HEADERS, Allow: "POST" })
+    .status(405)
+    .json({ error: "Session deletion is not supported." });
 });
 
 // --- Start server ---

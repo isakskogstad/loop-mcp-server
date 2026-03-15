@@ -1,0 +1,29 @@
+{
+  "name": "loop-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Loop/LoopDesk — corporate events, news, and company data",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@slack/web-api": "^7.9.1",
+    "@supabase/supabase-js": "^2.49.4",
+    "express": "^5.1.0",
+    "zod": "^3.25.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

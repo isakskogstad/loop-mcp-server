@@ -317,7 +317,7 @@ export function registerTools(server: McpServer): void {
     {
       title: "Get company directors",
       description:
-        "Get the board of directors for a company (from the directors JSONB field on CompanyDirectory).",
+        "Get the CEO and chairman for a company from CompanyDirectory.",
       inputSchema: {
         org_number: z.string().describe("Organization number (XXXXXX-XXXX)"),
       },
@@ -328,7 +328,7 @@ export function registerTools(server: McpServer): void {
         const sb = getClient();
         const { data, error } = await sb
           .from("CompanyDirectory")
-          .select("orgNumber, name, directors")
+          .select("orgNumber, name, ceo, chairman")
           .eq("orgNumber", params.org_number)
           .single();
 
@@ -336,7 +336,8 @@ export function registerTools(server: McpServer): void {
         return ok({
           orgNumber: data.orgNumber,
           name: data.name,
-          directors: data.directors ?? [],
+          ceo: data.ceo,
+          chairman: data.chairman,
         });
       } catch (e) {
         return fail(e);

@@ -89,37 +89,92 @@ app.options("/mcp", (_req: Request, res: Response) => {
   res.set(CORS_HEADERS).status(204).end();
 });
 
-// MCP endpoint — stateless, one transport per request
+// Store active transports by session ID
+const transports = new Map<string, StreamableHTTPServerTransport>();
+
+// MCP endpoint — supports both stateless (no session) and stateful (with session) modes
 app.post("/mcp", authMiddleware, async (req: Request, res: Response) => {
   res.set(CORS_HEADERS);
 
+  const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+  // If we have a session ID, try to reuse existing transport
+  if (sessionId && transports.has(sessionId)) {
+    const transport = transports.get(sessionId)!;
+    await transport.handleRequest(req, res, req.body);
+    return;
+  }
+
+  // New session — create server and transport
   const server = createServer();
 
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
+    sessionIdGenerator: () => globalThis.crypto.randomUUID(),
+    enableJsonResponse: !req.headers.accept?.includes("text/event-stream"),
   });
 
-  res.on("close", () => transport.close());
+  transport.onclose = () => {
+    const sid = transport.sessionId;
+    if (sid) transports.delete(sid);
+  };
+
+  res.on("close", () => {
+    // Clean up after 5 minutes of inactivity
+    const sid = transport.sessionId;
+    if (sid) {
+      setTimeout(() => {
+        if (transports.has(sid)) {
+          transports.get(sid)!.close();
+          transports.delete(sid);
+        }
+      }, 5 * 60 * 1000);
+    }
+  });
 
   await server.connect(transport);
+
+  if (transport.sessionId) {
+    transports.set(transport.sessionId, transport);
+  }
+
   await transport.handleRequest(req, res, req.body);
 });
 
-// SSE not supported — return 405 with Allow header
-app.get("/mcp", (_req: Request, res: Response) => {
-  res
-    .set({ ...CORS_HEADERS, Allow: "POST" })
-    .status(405)
-    .json({ error: "SSE transport is not supported. Use POST /mcp." });
+// SSE endpoint for streaming (GET /mcp with session ID)
+app.get("/mcp", (req: Request, res: Response) => {
+  const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+  if (!sessionId || !transports.has(sessionId)) {
+    res
+      .set({ ...CORS_HEADERS, Allow: "POST" })
+      .status(405)
+      .json({
+        error:
+          "SSE requires an active session. POST to /mcp first to initialize.",
+      });
+    return;
+  }
+
+  const transport = transports.get(sessionId)!;
+  res.set(CORS_HEADERS);
+  transport.handleRequest(req, res);
 });
 
-// Sessions not supported — return 405 with Allow header
-app.delete("/mcp", (_req: Request, res: Response) => {
+// Session deletion
+app.delete("/mcp", (req: Request, res: Response) => {
+  const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+  if (sessionId && transports.has(sessionId)) {
+    transports.get(sessionId)!.close();
+    transports.delete(sessionId);
+    res.set(CORS_HEADERS).status(204).end();
+    return;
+  }
+
   res
     .set({ ...CORS_HEADERS, Allow: "POST" })
     .status(405)
-    .json({ error: "Session deletion is not supported." });
+    .json({ error: "No active session to delete." });
 });
 
 // --- Start server ---

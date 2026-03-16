@@ -85,7 +85,7 @@ export function registerPineconeTools(server: McpServer): void {
     {
       title: "Semantic search articles",
       description:
-        "Semantic vector search over impactloop.se articles indexed in Pinecone. Returns the most relevant article chunks for a given query.",
+        "Semantic vector search over impactloop.se articles indexed in Pinecone using vector embeddings. Best for conceptual or topic-based searches where exact keywords may not appear in the text (e.g. 'companies working on carbon capture' or 'AI startups raising funding'). Returns the most relevant article chunks with score, title, and content.\n\nExample: query='greentech investments in Sweden' to find topically related articles.",
       inputSchema: {
         query: z.string().min(2).describe("Search query text"),
         top_k: z
@@ -198,7 +198,7 @@ export function registerPineconeTools(server: McpServer): void {
     {
       title: "List Pinecone indexes",
       description:
-        "Lists all available Pinecone indexes with their names and hosts. Useful for debugging configuration.",
+        "Lists all available Pinecone indexes with their names, hosts, dimensions, and status. Primarily useful for debugging Pinecone configuration and verifying which indexes are available before running loop_semantic_search.",
       inputSchema: {},
       annotations: {
         readOnlyHint: true,

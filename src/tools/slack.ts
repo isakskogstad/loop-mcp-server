@@ -14,7 +14,8 @@ export function registerSlackTools(server: McpServer): void {
   server.registerTool(
     "loop_send_slack_message",
     {
-      description: "Send a message to the Loop editorial Slack channel.",
+      description:
+        "Post a message to the Loop editorial team's Slack workspace. Defaults to the main editorial channel (SLACK_CHANNEL_ID). Use this to share news summaries, alerts, or analysis results with the team. Returns the message timestamp (ts) and channel ID on success.",
       inputSchema: {
         message: z
           .string()

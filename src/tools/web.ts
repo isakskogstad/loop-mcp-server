@@ -39,6 +39,14 @@ async function callBrightDataTool(
     );
   }
 
+  // Consume the body (may be SSE or JSON) to avoid connection issues
+  const initContentType = initRes.headers.get("content-type") ?? "";
+  if (initContentType.includes("text/event-stream")) {
+    await initRes.text(); // consume SSE stream
+  } else {
+    await initRes.json().catch(() => null); // consume JSON body
+  }
+
   // Get session ID from response header
   const sessionId = initRes.headers.get("mcp-session-id");
   if (!sessionId) {
@@ -73,6 +81,32 @@ async function callBrightDataTool(
     );
   }
 
+  const contentType = callRes.headers.get("content-type") ?? "";
+
+  // Handle SSE response — parse events and extract the JSON-RPC result
+  if (contentType.includes("text/event-stream")) {
+    const body = await callRes.text();
+    const lines = body.split("\n");
+    let lastData = "";
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        lastData = line.slice(6);
+      }
+    }
+    if (!lastData) {
+      throw new Error("No data events received from Bright Data SSE stream");
+    }
+    const parsed = JSON.parse(lastData) as {
+      result?: { content?: Array<{ text?: string }> };
+      error?: { message?: string; code?: number };
+    };
+    if (parsed.error) {
+      throw new Error(parsed.error.message ?? JSON.stringify(parsed.error));
+    }
+    return parsed.result?.content?.[0]?.text ?? JSON.stringify(parsed.result);
+  }
+
+  // Handle JSON response
   const raw = (await callRes.json()) as {
     result?: { content?: Array<{ text?: string }> };
     error?: { message?: string; code?: number };

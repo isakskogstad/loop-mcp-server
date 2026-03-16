@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import express, { Request, Response, NextFunction } from "express";
+import express, { Request, Response } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -20,8 +20,6 @@ for (const key of REQUIRED_ENV_VARS) {
   }
 }
 
-const LOOP_MCP_API_KEY = process.env.LOOP_MCP_API_KEY;
-
 // --- Create MCP server and register tools ---
 
 function createServer(): McpServer {
@@ -36,30 +34,6 @@ function createServer(): McpServer {
   registerWebTools(server);
 
   return server;
-}
-
-// --- Auth middleware ---
-
-function authMiddleware(req: Request, res: Response, next: NextFunction): void {
-  if (!LOOP_MCP_API_KEY) {
-    // No API key configured — skip auth
-    next();
-    return;
-  }
-
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Missing or invalid Authorization header" });
-    return;
-  }
-
-  const token = authHeader.slice(7);
-  if (token !== LOOP_MCP_API_KEY) {
-    res.status(403).json({ error: "Invalid API key" });
-    return;
-  }
-
-  next();
 }
 
 // --- Express app ---
@@ -79,7 +53,7 @@ app.get("/health", (_req: Request, res: Response) => {
 // CORS headers for MCP endpoint
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "Content-Type, Authorization, MCP-Session-Id, MCP-Protocol-Version",
 };
@@ -93,7 +67,7 @@ app.options("/mcp", (_req: Request, res: Response) => {
 const transports = new Map<string, StreamableHTTPServerTransport>();
 
 // MCP endpoint — supports both stateless (no session) and stateful (with session) modes
-app.post("/mcp", authMiddleware, async (req: Request, res: Response) => {
+app.post("/mcp", async (req: Request, res: Response) => {
   res.set(CORS_HEADERS);
 
   const sessionId = req.headers["mcp-session-id"] as string | undefined;

@@ -1,23 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-interface TavilyResult {
-  title: string;
-  url: string;
-  content: string;
-  score: number;
-}
-
-interface TavilyResponse {
-  answer?: string;
-  results: TavilyResult[];
-}
+const BRIGHTDATA_MCP_URL = "https://mcp.brightdata.com/mcp";
 
 export function registerWebTools(server: McpServer): void {
+  // -----------------------------------------------------------------------
+  // loop_web_search — Bright Data search engine
+  // -----------------------------------------------------------------------
   server.registerTool(
     "loop_web_search",
     {
-      description: "Live web search via Tavily API.",
+      title: "Web search",
+      description:
+        "Search the web using Bright Data (Google). Use for information not available in Loop's database.",
       inputSchema: {
         query: z
           .string()
@@ -36,15 +31,17 @@ export function registerWebTools(server: McpServer): void {
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
+        openWorldHint: true,
       },
     },
     async (params) => {
-      if (!process.env.TAVILY_API_KEY) {
+      const token = process.env.BRIGHTDATA_MCP_TOKEN;
+      if (!token) {
         return {
           content: [
             {
               type: "text" as const,
-              text: "Web search is not configured. Set the TAVILY_API_KEY environment variable.",
+              text: "Web search is not configured. Set the BRIGHTDATA_MCP_TOKEN environment variable.",
             },
           ],
           isError: true,
@@ -52,59 +49,179 @@ export function registerWebTools(server: McpServer): void {
       }
 
       try {
-        const response = await fetch("https://api.tavily.com/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            api_key: process.env.TAVILY_API_KEY,
-            query: params.query,
-            max_results: params.num_results,
-            search_depth: "basic",
-            include_answer: true,
-          }),
-        });
+        // Call Bright Data MCP search_engine tool via their MCP endpoint
+        const response = await fetch(
+          `${BRIGHTDATA_MCP_URL}?token=${token}&tools=search_engine`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: {
+                name: "search_engine",
+                arguments: {
+                  query: params.query,
+                  engine: "google",
+                  geo_location: "se",
+                },
+              },
+            }),
+          }
+        );
 
         if (!response.ok) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: `Error: Tavily API returned status ${response.status}`,
+                text: `Error: Bright Data API returned status ${
+                  response.status
+                }: ${await response.text()}`,
               },
             ],
             isError: true,
           };
         }
 
-        const raw = (await response.json()) as TavilyResponse;
-
-        const data = {
-          answer: raw.answer,
-          results: (raw.results ?? []).map((r: TavilyResult) => ({
-            title: r.title,
-            url: r.url,
-            content: r.content,
-            score: r.score,
-          })),
+        const raw = (await response.json()) as {
+          result?: { content?: Array<{ text?: string }> };
+          error?: { message?: string };
         };
 
+        if (raw.error) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Error: ${
+                  raw.error.message ?? JSON.stringify(raw.error)
+                }`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const text =
+          raw.result?.content?.[0]?.text ?? JSON.stringify(raw.result);
+
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(data, null, 2),
-            },
-          ],
+          content: [{ type: "text" as const, text }],
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {
+          content: [{ type: "text" as const, text: "Error: " + message }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // -----------------------------------------------------------------------
+  // loop_scrape_url — Bright Data URL scraper
+  // -----------------------------------------------------------------------
+  server.registerTool(
+    "loop_scrape_url",
+    {
+      title: "Scrape URL",
+      description:
+        "Scrape a web page and return its content as markdown. Use for reading articles, company pages, etc.",
+      inputSchema: {
+        url: z.string().url().describe("The URL to scrape"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async (params) => {
+      const token = process.env.BRIGHTDATA_MCP_TOKEN;
+      if (!token) {
+        return {
           content: [
             {
               type: "text" as const,
-              text: "Error: " + message,
+              text: "Web scraping is not configured. Set the BRIGHTDATA_MCP_TOKEN environment variable.",
             },
           ],
+          isError: true,
+        };
+      }
+
+      try {
+        const response = await fetch(
+          `${BRIGHTDATA_MCP_URL}?token=${token}&tools=scrape_as_markdown`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: {
+                name: "scrape_as_markdown",
+                arguments: {
+                  url: params.url,
+                },
+              },
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Error: Bright Data API returned status ${
+                  response.status
+                }: ${await response.text()}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const raw = (await response.json()) as {
+          result?: { content?: Array<{ text?: string }> };
+          error?: { message?: string };
+        };
+
+        if (raw.error) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Error: ${
+                  raw.error.message ?? JSON.stringify(raw.error)
+                }`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const text =
+          raw.result?.content?.[0]?.text ?? JSON.stringify(raw.result);
+
+        return {
+          content: [{ type: "text" as const, text }],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: "Error: " + message }],
           isError: true,
         };
       }

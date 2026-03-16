@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express, { Request, Response, NextFunction } from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import { registerTools as registerSupabaseTools } from "./tools/supabase.js";
 import { registerPineconeTools } from "./tools/pinecone.js";
@@ -64,6 +66,10 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
 
 const app = express();
 app.use(express.json());
+
+// Serve static landing page
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+app.use(express.static(path.join(__dirname, "..", "public")));
 
 // Health check
 app.get("/health", (_req: Request, res: Response) => {

@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loop MCP Server</title>
+    <style>
+      :root {
+        --bg: #0a0a0b;
+        --surface: #141416;
+        --border: #27272a;
+        --text: #fafafa;
+        --text-muted: #a1a1aa;
+        --accent: #3b82f6;
+        --accent-soft: rgba(59, 130, 246, 0.1);
+        --green: #22c55e;
+        --green-soft: rgba(34, 197, 94, 0.1);
+        --code-bg: #1a1a1e;
+        --radius: 12px;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 48px 24px 96px;
+      }
+
+      /* Header */
+      .header {
+        text-align: center;
+        margin-bottom: 56px;
+      }
+
+      .logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .logo-icon {
+        width: 48px;
+        height: 48px;
+        background: var(--accent-soft);
+        border: 1px solid var(--accent);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+      }
+
+      .logo-text {
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+      }
+
+      .tagline {
+        color: var(--text-muted);
+        font-size: 16px;
+        max-width: 480px;
+        margin: 0 auto;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 16px;
+        padding: 6px 14px;
+        background: var(--green-soft);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+        border-radius: 100px;
+        font-size: 13px;
+        color: var(--green);
+        font-weight: 500;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        background: var(--green);
+        border-radius: 50%;
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
+
+      /* Section */
+      .section {
+        margin-bottom: 40px;
+      }
+
+      .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        letter-spacing: -0.3px;
+      }
+
+      .section-desc {
+        color: var(--text-muted);
+        font-size: 14px;
+        margin-bottom: 16px;
+      }
+
+      /* Steps */
+      .steps {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .step {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px 24px;
+      }
+
+      .step-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .step-number {
+        width: 28px;
+        height: 28px;
+        background: var(--accent-soft);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--accent);
+        flex-shrink: 0;
+      }
+
+      .step-title {
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .step-content {
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+
+      .step-content a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .step-content a:hover {
+        text-decoration: underline;
+      }
+
+      /* Code block */
+      .code-block {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 12px;
+        position: relative;
+        overflow-x: auto;
+      }
+
+      .code-block pre {
+        font-family: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--text);
+        white-space: pre;
+        margin: 0;
+      }
+
+      .code-block .comment {
+        color: #6b7280;
+      }
+      .code-block .string {
+        color: #a5d6ff;
+      }
+      .code-block .key {
+        color: #7dd3fc;
+      }
+
+      .copy-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 12px;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .copy-btn:hover {
+        color: var(--text);
+        border-color: var(--accent);
+      }
+
+      /* Tabs */
+      .tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 4px;
+      }
+
+      .tab {
+        flex: 1;
+        padding: 10px 16px;
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        border-radius: 7px;
+        transition: all 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      .tab:hover {
+        color: var(--text);
+      }
+
+      .tab.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+      }
+
+      .tab-panel {
+        display: none;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* URL display */
+      .url-box {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .url-text {
+        font-family: "SF Mono", "Fira Code", monospace;
+        font-size: 13px;
+        color: var(--accent);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Tools grid */
+      .tools-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .tool-item {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 13px;
+      }
+
+      .tool-name {
+        font-family: "SF Mono", monospace;
+        font-size: 12px;
+        color: var(--accent);
+      }
+
+      .tool-desc {
+        color: var(--text-muted);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      /* Footer */
+      .footer {
+        margin-top: 64px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+
+      .footer a {
+        color: var(--text-muted);
+        text-decoration: none;
+      }
+
+      .footer a:hover {
+        color: var(--text);
+      }
+
+      @media (max-width: 600px) {
+        .tools-grid {
+          grid-template-columns: 1fr;
+        }
+        .container {
+          padding: 32px 16px 64px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <div class="header">
+        <div class="logo">
+          <div class="logo-icon">L</div>
+          <span class="logo-text">Loop MCP</span>
+        </div>
+        <p class="tagline">
+          Anslut Claude eller ChatGPT till LoopDesks databas med
+          bolagshändelser, finansdata, kungörelser och nyheter.
+        </p>
+        <div class="status-badge">
+          <span class="status-dot"></span>
+          Online
+        </div>
+      </div>
+
+      <!-- Server URL -->
+      <div class="section">
+        <div class="section-title">Server URL</div>
+        <div class="url-box">
+          <span class="url-text"
+            >https://loop-mcp-server-production.up.railway.app/mcp</span
+          >
+          <button
+            class="copy-btn"
+            onclick="copyText('https://loop-mcp-server-production.up.railway.app/mcp', this)"
+          >
+            Kopiera
+          </button>
+        </div>
+      </div>
+
+      <!-- Setup tabs -->
+      <div class="section">
+        <div class="section-title">Kom igång</div>
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab('claude')">
+            Claude
+          </button>
+          <button class="tab" onclick="switchTab('chatgpt')">ChatGPT</button>
+          <button class="tab" onclick="switchTab('cursor')">Cursor</button>
+        </div>
+
+        <!-- Claude -->
+        <div id="tab-claude" class="tab-panel active">
+          <div class="steps">
+            <div class="step">
+              <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-title">Öppna Claude</div>
+              </div>
+              <div class="step-content">
+                Gå till
+                <a href="https://claude.ai" target="_blank">claude.ai</a> eller
+                öppna Claude Desktop-appen.
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-title">Lägg till MCP-server</div>
+              </div>
+              <div class="step-content">
+                <strong>Claude.ai:</strong> Gå till Settings > Connectors > Add
+                connector. Klistra in server-URL:en ovan.<br /><br />
+                <strong>Claude Desktop:</strong> Redigera
+                <code>claude_desktop_config.json</code> och lägg till:
+                <div class="code-block">
+                  <button class="copy-btn" onclick="copyCode(this)">
+                    Kopiera
+                  </button>
+                  <pre>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"loop"</span>: {
+      <span class="key">"url"</span>: <span class="string">"https://loop-mcp-server-production.up.railway.app/mcp"</span>,
+      <span class="key">"headers"</span>: {
+        <span class="key">"Authorization"</span>: <span class="string">"Bearer DIN_API_NYCKEL"</span>
+      }
+    }
+  }
+}</pre>
+                </div>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-title">Börja chatta</div>
+              </div>
+              <div class="step-content">
+                Fråga Claude om svenska bolagshändelser, t.ex:<br />
+                <em>"Vilka bolag har haft nyemission senaste månaden?"</em
+                ><br />
+                <em>"Visa mig finansdata för Einride"</em><br />
+                <em>"Sök efter konkurser i Stockholm"</em>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ChatGPT -->
+        <div id="tab-chatgpt" class="tab-panel">
+          <div class="steps">
+            <div class="step">
+              <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-title">Öppna ChatGPT</div>
+              </div>
+              <div class="step-content">
+                Gå till
+                <a href="https://chat.openai.com" target="_blank"
+                  >chat.openai.com</a
+                >
+                (kräver Plus, Team eller Enterprise).
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-title">Lägg till MCP-server</div>
+              </div>
+              <div class="step-content">
+                Gå till Settings > Tools & Connectors > Add MCP Server.<br /><br />
+                Klistra in server-URL:en:<br />
+                <code
+                  >https://loop-mcp-server-production.up.railway.app/mcp</code
+                ><br /><br />
+                Lägg till Authorization-headern med din API-nyckel.
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-title">Börja chatta</div>
+              </div>
+              <div class="step-content">
+                Ställ frågor om bolagshändelser, precis som med Claude. ChatGPT
+                kommer använda Loop-verktygen automatiskt.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cursor -->
+        <div id="tab-cursor" class="tab-panel">
+          <div class="steps">
+            <div class="step">
+              <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-title">Öppna Cursor Settings</div>
+              </div>
+              <div class="step-content">
+                Gå till Cursor > Settings > MCP Servers.
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-title">Lägg till server</div>
+              </div>
+              <div class="step-content">
+                Klicka "Add MCP Server" och klistra in:<br />
+                <div class="code-block">
+                  <button class="copy-btn" onclick="copyCode(this)">
+                    Kopiera
+                  </button>
+                  <pre>{
+  <span class="key">"loop"</span>: {
+    <span class="key">"url"</span>: <span class="string">"https://loop-mcp-server-production.up.railway.app/mcp"</span>,
+    <span class="key">"headers"</span>: {
+      <span class="key">"Authorization"</span>: <span class="string">"Bearer DIN_API_NYCKEL"</span>
+    }
+  }
+}</pre>
+                </div>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-title">Använd i Agent mode</div>
+              </div>
+              <div class="step-content">
+                Loop-verktygen dyker upp automatiskt i Cursors Agent mode. Ställ
+                frågor om bolag direkt i editorn.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Available tools -->
+      <div class="section">
+        <div class="section-title">17 tillgängliga verktyg</div>
+        <div class="section-desc">
+          AI:n väljer automatiskt rätt verktyg baserat på din fråga.
+        </div>
+        <div class="tools-grid">
+          <div class="tool-item">
+            <div class="tool-name">loop_search_news</div>
+            <div class="tool-desc">Sök nyheter och händelser</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_list_recent_news</div>
+            <div class="tool-desc">Senaste nyheterna</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_get_company</div>
+            <div class="tool-desc">Bolagsinfo + händelser</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_search_companies</div>
+            <div class="tool-desc">Sök bland bolag</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_get_company_financials</div>
+            <div class="tool-desc">Finansdata</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_search_protocols</div>
+            <div class="tool-desc">Sök protokoll</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_search_kungorelser</div>
+            <div class="tool-desc">Kungörelser (konkurs etc.)</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_query_table</div>
+            <div class="tool-desc">Flexibel databasquery</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_list_tables</div>
+            <div class="tool-desc">Lista alla tabeller</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_semantic_search</div>
+            <div class="tool-desc">Semantisk artikelsökning</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_send_slack_message</div>
+            <div class="tool-desc">Skicka till redaktionen</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_web_search</div>
+            <div class="tool-desc">Google-sökning</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_scrape_url</div>
+            <div class="tool-desc">Läs webbsidor</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_get_news_item</div>
+            <div class="tool-desc">Enskilt nyhetskort</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_get_company_directors</div>
+            <div class="tool-desc">VD och ordförande</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_get_company_events</div>
+            <div class="tool-desc">Alla händelser per bolag</div>
+          </div>
+          <div class="tool-item">
+            <div class="tool-name">loop_list_pinecone_indexes</div>
+            <div class="tool-desc">Lista sökindex</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        Loop MCP Server &mdash;
+        <a href="https://www.loopdesk.se">LoopDesk</a> &middot;
+        <a href="https://www.impactloop.se">Impact Loop</a>
+      </div>
+    </div>
+
+    <script>
+      function switchTab(name) {
+        document
+          .querySelectorAll(".tab")
+          .forEach((t) => t.classList.remove("active"));
+        document
+          .querySelectorAll(".tab-panel")
+          .forEach((p) => p.classList.remove("active"));
+        event.currentTarget.classList.add("active");
+        document.getElementById("tab-" + name).classList.add("active");
+      }
+
+      function copyText(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+          btn.textContent = "Kopierat!";
+          setTimeout(() => (btn.textContent = "Kopiera"), 2000);
+        });
+      }
+
+      function copyCode(btn) {
+        const code = btn.parentElement.querySelector("pre").textContent;
+        navigator.clipboard.writeText(code).then(() => {
+          btn.textContent = "Kopierat!";
+          setTimeout(() => (btn.textContent = "Kopiera"), 2000);
+        });
+      }
+    </script>
+  </body>
+</html>

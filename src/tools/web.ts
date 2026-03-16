@@ -1,7 +1,89 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-const BRIGHTDATA_MCP_URL = "https://mcp.brightdata.com/mcp";
+const BRIGHTDATA_MCP_BASE = "https://mcp.brightdata.com";
+
+/**
+ * Calls a Bright Data MCP tool using proper initialize → tools/call flow.
+ */
+async function callBrightDataTool(
+  token: string,
+  toolName: string,
+  args: Record<string, unknown>
+): Promise<string> {
+  // Step 1: Initialize and get session ID
+  const initRes = await fetch(
+    `${BRIGHTDATA_MCP_BASE}/mcp?token=${token}&tools=${toolName}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "loop-mcp-server", version: "1.0.0" },
+        },
+      }),
+    }
+  );
+
+  if (!initRes.ok) {
+    throw new Error(
+      `Bright Data initialize failed: ${initRes.status} ${await initRes.text()}`
+    );
+  }
+
+  // Get session ID from response header
+  const sessionId = initRes.headers.get("mcp-session-id");
+  if (!sessionId) {
+    throw new Error("No MCP-Session-Id returned from Bright Data initialize");
+  }
+
+  // Step 2: Call the tool with the session ID
+  const callRes = await fetch(
+    `${BRIGHTDATA_MCP_BASE}/mcp?token=${token}&tools=${toolName}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        "Mcp-Session-Id": sessionId,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: toolName,
+          arguments: args,
+        },
+      }),
+    }
+  );
+
+  if (!callRes.ok) {
+    throw new Error(
+      `Bright Data tool call failed: ${callRes.status} ${await callRes.text()}`
+    );
+  }
+
+  const raw = (await callRes.json()) as {
+    result?: { content?: Array<{ text?: string }> };
+    error?: { message?: string; code?: number };
+  };
+
+  if (raw.error) {
+    throw new Error(raw.error.message ?? JSON.stringify(raw.error));
+  }
+
+  return raw.result?.content?.[0]?.text ?? JSON.stringify(raw.result);
+}
 
 export function registerWebTools(server: McpServer): void {
   // -----------------------------------------------------------------------
@@ -49,66 +131,11 @@ export function registerWebTools(server: McpServer): void {
       }
 
       try {
-        // Call Bright Data MCP search_engine tool via their MCP endpoint
-        const response = await fetch(
-          `${BRIGHTDATA_MCP_URL}?token=${token}&tools=search_engine`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 1,
-              method: "tools/call",
-              params: {
-                name: "search_engine",
-                arguments: {
-                  query: params.query,
-                  engine: "google",
-                  geo_location: "se",
-                },
-              },
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Error: Bright Data API returned status ${
-                  response.status
-                }: ${await response.text()}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        const raw = (await response.json()) as {
-          result?: { content?: Array<{ text?: string }> };
-          error?: { message?: string };
-        };
-
-        if (raw.error) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Error: ${
-                  raw.error.message ?? JSON.stringify(raw.error)
-                }`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        const text =
-          raw.result?.content?.[0]?.text ?? JSON.stringify(raw.result);
+        const text = await callBrightDataTool(token, "search_engine", {
+          query: params.query,
+          engine: "google",
+          geo_location: "se",
+        });
 
         return {
           content: [{ type: "text" as const, text }],
@@ -157,63 +184,9 @@ export function registerWebTools(server: McpServer): void {
       }
 
       try {
-        const response = await fetch(
-          `${BRIGHTDATA_MCP_URL}?token=${token}&tools=scrape_as_markdown`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 1,
-              method: "tools/call",
-              params: {
-                name: "scrape_as_markdown",
-                arguments: {
-                  url: params.url,
-                },
-              },
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Error: Bright Data API returned status ${
-                  response.status
-                }: ${await response.text()}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        const raw = (await response.json()) as {
-          result?: { content?: Array<{ text?: string }> };
-          error?: { message?: string };
-        };
-
-        if (raw.error) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Error: ${
-                  raw.error.message ?? JSON.stringify(raw.error)
-                }`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        const text =
-          raw.result?.content?.[0]?.text ?? JSON.stringify(raw.result);
+        const text = await callBrightDataTool(token, "scrape_as_markdown", {
+          url: params.url,
+        });
 
         return {
           content: [{ type: "text" as const, text }],
